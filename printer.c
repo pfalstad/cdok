@@ -32,7 +32,7 @@ void cdok_print_puzzle(const struct cdok_puzzle *puz,
 			if (x)
 				fprintf(out, "\t");
 
-			if (values[c]) {
+			if (values[c] != NO_VALUE) {
 				fprintf(out, "%d", values[c]);
 			} else if (puz->group_map[c] != CDOK_GROUP_NONE) {
 				const struct cdok_group *g =
@@ -154,7 +154,7 @@ static void print_char(uint16_t ch, int count, FILE *out)
  */
 static int format_value(char *text, int max_len, uint8_t value)
 {
-	if (!value) {
+	if (value == NO_VALUE) {
 		text[0] = 0;
 		return 0;
 	}
