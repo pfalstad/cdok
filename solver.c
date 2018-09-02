@@ -99,7 +99,7 @@ static cdok_set_t addends_for(int target, int n, int max)
 	if (a_min > a_max)
 		return 0;
 
-printf("for target %d, setting range from %d to %d\n", target, a_min, a_max);
+	//printf("for target %d, setting range from %d to %d\n", target, a_min, a_max);
 	return CDOK_SET_RANGE(a_min, a_max);
 }
 
@@ -326,6 +326,17 @@ static void build_rc_candidates(const uint8_t *values, cdok_set_t *candidates,
 
 		if (v != NO_VALUE) {
 			cdok_set_t s = CDOK_SET_SINGLE(v);
+			if (v < 10) {
+				if (v != 0)
+				    s |= CDOK_SET_RANGE(v*10, v*10+9);
+				int j;
+				for (j = v+10; j < 100; j += 10)
+					s |= CDOK_SET_SINGLE(j);
+			} else {
+				s = CDOK_SET_RANGE(10, 99);
+				s |= CDOK_SET_SINGLE(v/10);
+				s |= CDOK_SET_SINGLE(v%10);
+			}
 
 			rows[CDOK_POS_Y(i)] |= s;
 			cols[CDOK_POS_X(i)] |= s;
@@ -335,8 +346,7 @@ static void build_rc_candidates(const uint8_t *values, cdok_set_t *candidates,
 	/* Mark each cell with the values not found in that row/column */
 	for (i = 0; i < CDOK_CELLS; i++)
 		candidates[i] =
-			CDOK_SET_ONES(max) ^
-			(rows[CDOK_POS_Y(i)] | cols[CDOK_POS_X(i)]);
+			CDOK_SET_ONES(max) & ~(rows[CDOK_POS_Y(i)] | cols[CDOK_POS_X(i)]);
 }
 
 /* Set size */
@@ -372,8 +382,8 @@ static void constrain_by_groups(const struct cdok_puzzle *puz,
 			for (j = 0; j < g->size; j++) {
 				int mem = g->members[j];
 				candidates[g->members[j]] &= c;
-printf("candidates for r%d,c%d: ", mem/16, mem%16);
-print_candidates(candidates[g->members[j]]); printf("\n");
+				//printf("candidates for r%d,c%d: ", mem/16, mem%16);
+				//print_candidates(candidates[g->members[j]]); printf("\n");
 			}
 		}
 	}
@@ -496,14 +506,14 @@ static void solve_recurse(struct solver_context *ctx, int branch_diff)
 
 	/* Is the puzzle unsolvable? */
 	if (!candidates) {
-		printf("no candidates in cell r%d,c%d\n", cell/16, cell%16);
+		//printf("no candidates in cell r%d,c%d\n", cell/16, cell%16);
 		return;
 	}
 
 	/* Try backtracking on the most constrained cell/value */
 	diff = count_bits(candidates) - 1;
-printf("backtracking on cell r%d,c%d\n", cell/16, cell%16);
-print_candidates(candidates); printf("\n");
+	//printf("backtracking on cell r%d,c%d\n", cell/16, cell%16);
+	//print_candidates(candidates); printf("\n");
 	diff = branch_diff + (diff * diff);
 
 	real_max = ctx->puzzle->nylimb ? 99 : ctx->puzzle->size;
@@ -511,7 +521,7 @@ print_candidates(candidates); printf("\n");
 		if (!(candidates & CDOK_SET_SINGLE(i)))
 			continue;
 
-printf("trying %d in cell r%d,c%d\n", i, cell/16, cell%16);
+		//printf("trying %d in cell r%d,c%d\n", i, cell/16, cell%16);
 		ctx->values[cell] = i;
 		solve_recurse(ctx, diff);
 		ctx->values[cell] = NO_VALUE;
