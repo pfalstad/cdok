@@ -92,12 +92,20 @@ struct cdok_puzzle {
  * to have at least CDOK_SIZE bits.
  */
 //typedef uint16_t cdok_set_t;
-typedef __int128 cdok_set_t;
+typedef unsigned __int128 cdok_set_t;
 
+#if 0
 #define CDOK_SET_SINGLE(c)		(1 << ((c) - 1))
 #define CDOK_SET_ONES(s)		((1 << (s)) - 1)
 #define CDOK_SET_RANGE(min, max)	\
 	(CDOK_SET_ONES(max - min + 1) << (min - 1))
+#else
+/* 0 is a valid cell number! */
+#define CDOK_SET_SINGLE(c)		( (unsigned __int128) 1 << ((c)))
+#define CDOK_SET_ONES(s)		(( (unsigned __int128) 1 << (s+1)) - 1)
+#define CDOK_SET_RANGE(min, max)	\
+	( (unsigned __int128) CDOK_SET_ONES(max - min) << (min))
+#endif
 
 /* Initialize a new, empty grid */
 void cdok_init_puzzle(struct cdok_puzzle *puz, int size);
@@ -112,5 +120,7 @@ void cdok_flood_fill(uint8_t *map, uint8_t src, int x, int y);
  */
 uint8_t cdok_group_to_char(uint8_t g);
 uint8_t cdok_char_to_group(uint8_t ch);
+
+#define NO_VALUE 150
 
 #endif

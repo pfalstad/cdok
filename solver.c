@@ -15,8 +15,53 @@
  */
 
 #include <string.h>
+#include <stdio.h>
+#include <inttypes.h>
 
 #include "solver.h"
+
+/*
+** Using documented GCC type unsigned __int128 instead of undocumented
+** obsolescent typedef name __uint128_t.  Works with GCC 4.7.1 but not
+** GCC 4.1.2 (but __uint128_t works with GCC 4.1.2) on Mac OS X 10.7.4.
+*/
+typedef unsigned __int128 uint128_t;
+
+/*      UINT64_MAX 18446744073709551615ULL */
+#define P10_UINT64 10000000000000000000ULL /* 19 zeroes */
+#define E10_UINT64 19
+
+#define STRINGIZER(x) # x
+#define TO_STRING(x) STRINGIZER(x)
+
+int print_uint128_decimal(__uint128_t big) {
+  size_t rc = 0;
+  size_t i = 0;
+  if (big >> 64) {
+    char buf[40];
+    while (big / P10_UINT64) {
+      rc += sprintf(buf + E10_UINT64 * i, "%." TO_STRING(E10_UINT64) PRIu64,
+		(uint64_t)(big % P10_UINT64));
+      ++i;
+      big /= P10_UINT64;
+    }
+    rc += printf("%" PRIu64, (uint64_t)big);
+    while (i--) {
+      fwrite(buf + E10_UINT64 * i, sizeof(char), E10_UINT64, stdout);
+    }
+  } else {
+    rc += printf("%" PRIu64, (uint64_t)big);
+  }
+  return rc;
+}
+
+void print_candidates(__uint128_t big) {
+    int i = 0;
+    while (big) {
+      if (big & 1) printf(" %d", i);
+      big /= 2; i++;
+    }
+}
 
 /************************************************************************
  * Group analysis
@@ -47,13 +92,14 @@ static cdok_set_t addends_for(int target, int n, int max)
 	if (a_min < 0)
 		a_min = 0;
 
-	a_max = target - n;
+	a_max = target;
 	if (a_max > max)
 		a_max = max;
 
 	if (a_min > a_max)
 		return 0;
 
+printf("for target %d, setting range from %d to %d\n", target, a_min, a_max);
 	return CDOK_SET_RANGE(a_min, a_max);
 }
 
@@ -165,7 +211,7 @@ static cdok_set_t product_candidates(int target, int size,
 	for (i = 0; i < nm; i++)
 		partial_product *= members[i];
 
-	if (target % partial_product)
+	if (partial_product == 0 || target % partial_product)
 		return 0;
 
 	return factors_for(target / partial_product, size - nm, max);
@@ -235,7 +281,7 @@ static cdok_set_t group_candidates(const struct cdok_group *g,
 	for (i = 0; i < g->size; i++) {
 		uint8_t v = values[g->members[i]];
 
-		if (v)
+		if (v != NO_VALUE)
 			members[count++] = v;
 	}
 
@@ -278,7 +324,7 @@ static void build_rc_candidates(const uint8_t *values, cdok_set_t *candidates,
 	for (i = 0; i < CDOK_CELLS; i++) {
 		uint8_t v = values[i];
 
-		if (v) {
+		if (v != NO_VALUE) {
 			cdok_set_t s = CDOK_SET_SINGLE(v);
 
 			rows[CDOK_POS_Y(i)] |= s;
@@ -316,7 +362,6 @@ static void constrain_by_groups(const struct cdok_puzzle *puz,
 	int i;
 	int real_max = puz->nylimb ? 99 : puz->size;
 
-printf("puz->size = %d\n", puz->size);
 	for (i = 0; i < CDOK_GROUPS; i++) {
 		const struct cdok_group *g = &puz->groups[i];
 
@@ -324,8 +369,12 @@ printf("puz->size = %d\n", puz->size);
 			cdok_set_t c = group_candidates(g, values, real_max);
 			int j;
 
-			for (j = 0; j < g->size; j++)
+			for (j = 0; j < g->size; j++) {
+				int mem = g->members[j];
 				candidates[g->members[j]] &= c;
+printf("candidates for r%d,c%d: ", mem/16, mem%16);
+print_candidates(candidates[g->members[j]]); printf("\n");
+			}
 		}
 	}
 }
@@ -348,7 +397,7 @@ static cdok_pos_t search_least_free(const uint8_t *values,
 		for (x = 0; x < max; x++) {
 			const cdok_pos_t c = CDOK_POS(x, y);
 
-			if (!values[c]) {
+			if (values[c] == NO_VALUE) {
 				int count = count_bits(candidates[c]);
 
 				if (best < 0 || count < best_count) {
@@ -378,7 +427,8 @@ static cdok_pos_t find_candidates(const struct cdok_puzzle *puz,
 	cdok_set_t candidates[CDOK_CELLS];
 	cdok_pos_t c;
 
-	build_rc_candidates(values, candidates, puz->size);
+	int real_max = puz->nylimb ? 99 : puz->size;
+	build_rc_candidates(values, candidates, real_max);
 	constrain_by_groups(puz, values, candidates);
 
 	/* Choose branches for value-oriented search */
@@ -430,7 +480,6 @@ static void solve_recurse(struct solver_context *ctx, int branch_diff)
 	int real_max;
 
 	cell = find_candidates(ctx->puzzle, ctx->values, &candidates);
-printf("cell %d\n", cell);
 
 	/* Is the puzzle solved? */
 	if (cell < 0) {
@@ -446,22 +495,26 @@ printf("cell %d\n", cell);
 	}
 
 	/* Is the puzzle unsolvable? */
-	if (!candidates)
+	if (!candidates) {
+		printf("no candidates in cell r%d,c%d\n", cell/16, cell%16);
 		return;
+	}
 
-printf("backtracking\n");
 	/* Try backtracking on the most constrained cell/value */
 	diff = count_bits(candidates) - 1;
+printf("backtracking on cell r%d,c%d\n", cell/16, cell%16);
+print_candidates(candidates); printf("\n");
 	diff = branch_diff + (diff * diff);
 
 	real_max = ctx->puzzle->nylimb ? 99 : ctx->puzzle->size;
-	for (i = 0; i <= real_max; i++) {
+	for (i = ctx->puzzle->nylimb ? 0 : 1; i <= real_max; i++) {
 		if (!(candidates & CDOK_SET_SINGLE(i)))
 			continue;
 
+printf("trying %d in cell r%d,c%d\n", i, cell/16, cell%16);
 		ctx->values[cell] = i;
 		solve_recurse(ctx, diff);
-		ctx->values[cell] = 0;
+		ctx->values[cell] = NO_VALUE;
 
 		if (ctx->count >= 2)
 			return;
@@ -483,7 +536,10 @@ printf("backtracking\n");
 int cdok_solve(const struct cdok_puzzle *puz, uint8_t *solution, int *diff)
 {
 	struct solver_context ctx;
-
+print_uint128_decimal(0); printf("\n");
+print_uint128_decimal( (uint128_t) 1 << 99); printf("\n");
+print_uint128_decimal(CDOK_SET_SINGLE(99)); printf("\n");
+print_uint128_decimal(-1); printf("\n");
 	ctx.puzzle = puz;
 	ctx.solution = solution;
 	ctx.count = 0;
@@ -491,8 +547,10 @@ int cdok_solve(const struct cdok_puzzle *puz, uint8_t *solution, int *diff)
 
 	solve_recurse(&ctx, 0);
 
-	if (!ctx.count)
+	if (!ctx.count) {
+		printf("failed\n");
 		return -1;
+     }
 
 	if (diff) {
 		int m = 1;
@@ -504,7 +562,7 @@ int cdok_solve(const struct cdok_puzzle *puz, uint8_t *solution, int *diff)
 
 		for (y = 0; y < puz->size; y++)
 			for (x = 0; x < puz->size; x++)
-				if (!puz->values[CDOK_POS(x, y)])
+				if (puz->values[CDOK_POS(x, y)] == NO_VALUE)
 					e++;
 
 		*diff = ctx.branch_diff * m + e;

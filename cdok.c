@@ -48,6 +48,11 @@ void cdok_init_puzzle(struct cdok_puzzle *puz, int size)
 	for (i = 0; i < CDOK_GROUPS; i++)
 		puz->groups[i].target = -1;
 
+int x;
+                        for (x = 0; x < CDOK_CELLS; x++)
+                                puz->values[x] = NO_VALUE;
+
+
 	puz->size = size;
 	memset(puz->group_map, CDOK_GROUP_NONE, sizeof(puz->group_map));
 }
