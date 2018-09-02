@@ -25,7 +25,7 @@
  * of the value (n+1) in the set.
  */
 
-/* If N addends in the range [1..max] are used to make the target sum,
+/* If N addends in the range [0..max] are used to make the target sum,
  * what is the set of possible addends?
  */
 static cdok_set_t addends_for(int target, int n, int max)
@@ -33,21 +33,21 @@ static cdok_set_t addends_for(int target, int n, int max)
 	int a_min;
 	int a_max;
 
-	if (target < 1 || n < 1)
+	if (target < 0 || n < 1)
 		return 0;
 
 	if (n == 1) {
-		if (target >= 1 && target <= max)
+		if (target >= 0 && target <= max)
 			return CDOK_SET_SINGLE(target);
 
 		return 0;
 	}
 
-	a_min = target - max * (n - 1);
-	if (a_min < 1)
-		a_min = 1;
+	a_min = target - max * n;
+	if (a_min < 0)
+		a_min = 0;
 
-	a_max = target - (n - 1);
+	a_max = target - n;
 	if (a_max > max)
 		a_max = max;
 
@@ -314,12 +314,14 @@ static void constrain_by_groups(const struct cdok_puzzle *puz,
 				cdok_set_t *candidates)
 {
 	int i;
+	int real_max = puz->nylimb ? 99 : puz->size;
 
+printf("puz->size = %d\n", puz->size);
 	for (i = 0; i < CDOK_GROUPS; i++) {
 		const struct cdok_group *g = &puz->groups[i];
 
 		if (g->size) {
-			cdok_set_t c = group_candidates(g, values, puz->size);
+			cdok_set_t c = group_candidates(g, values, real_max);
 			int j;
 
 			for (j = 0; j < g->size; j++)
@@ -428,6 +430,7 @@ static void solve_recurse(struct solver_context *ctx, int branch_diff)
 	int real_max;
 
 	cell = find_candidates(ctx->puzzle, ctx->values, &candidates);
+printf("cell %d\n", cell);
 
 	/* Is the puzzle solved? */
 	if (cell < 0) {
@@ -446,12 +449,13 @@ static void solve_recurse(struct solver_context *ctx, int branch_diff)
 	if (!candidates)
 		return;
 
+printf("backtracking\n");
 	/* Try backtracking on the most constrained cell/value */
 	diff = count_bits(candidates) - 1;
 	diff = branch_diff + (diff * diff);
 
 	real_max = ctx->puzzle->nylimb ? 99 : ctx->puzzle->size;
-	for (i = 1; i <= real_max; i++) {
+	for (i = 0; i <= real_max; i++) {
 		if (!(candidates & CDOK_SET_SINGLE(i)))
 			continue;
 
